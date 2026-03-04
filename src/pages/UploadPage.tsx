@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import * as pdfjsLib from "pdfjs-dist";
+
 
 // We'll extract text client-side using a simple approach
 async function extractTextFromPDF(file: File): Promise<string> {
