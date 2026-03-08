@@ -6,31 +6,15 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import * as pdfjsLib from "pdfjs-dist";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs`;
-
-async function extractTextFromPDF(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const textParts: string[] = [];
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item: any) => item.str)
-      .join(" ");
-    textParts.push(pageText);
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
-
-  const text = textParts.join("\n").trim();
-
-  if (text.length < 50) {
-    throw new Error("Could not extract sufficient text from the PDF. The file may be image-based or encrypted.");
-  }
-
-  return text;
+  return btoa(binary);
 }
 
 export default function UploadPage() {
@@ -105,21 +89,16 @@ export default function UploadPage() {
 
       if (insertError) throw insertError;
 
-      // 4. Extract text from PDF
-      setStatus("Extracting text from PDF...");
-      let extractedText: string;
-      try {
-        extractedText = await extractTextFromPDF(file);
-      } catch {
-        // If client-side extraction fails, send a minimal message
-        extractedText = `Financial report: ${file.name}. Unable to extract text client-side. Please analyze based on the filename and common financial report patterns.`;
-      }
+      // 4. Convert PDF to base64 for server-side processing
+      setStatus("Preparing PDF for analysis...");
+      const base64 = await fileToBase64(file);
 
       // 5. Call AI analysis
       setStatus("Analyzing with AI...");
       const { data: analysisData, error: fnError } = await supabase.functions.invoke("analyze-report", {
-        body: { extractedText },
+        body: { pdfBase64: base64, fileName: file.name },
       });
+
 
       if (fnError) {
         console.error("Edge function error:", fnError);
