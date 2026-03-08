@@ -121,7 +121,10 @@ export default function UploadPage() {
         body: { extractedText },
       });
 
-      if (fnError) throw fnError;
+      if (fnError) {
+        console.error("Edge function error:", fnError);
+        throw new Error(fnError.message || "AI analysis failed. Please try again.");
+      }
       if (analysisData?.error) throw new Error(analysisData.error);
 
       // 6. Save analysis results
