@@ -89,15 +89,15 @@ export default function UploadPage() {
 
       if (insertError) throw insertError;
 
-      // 4. Extract text from PDF
-      setStatus("Extracting text from PDF...");
-      let extractedText: string;
-      try {
-        extractedText = await extractTextFromPDF(file);
-      } catch {
-        // If client-side extraction fails, send a minimal message
-        extractedText = `Financial report: ${file.name}. Unable to extract text client-side. Please analyze based on the filename and common financial report patterns.`;
-      }
+      // 4. Convert PDF to base64 for server-side processing
+      setStatus("Preparing PDF for analysis...");
+      const base64 = await fileToBase64(file);
+
+      // 5. Call AI analysis
+      setStatus("Analyzing with AI...");
+      const { data: analysisData, error: fnError } = await supabase.functions.invoke("analyze-report", {
+        body: { pdfBase64: base64, fileName: file.name },
+      });
 
       // 5. Call AI analysis
       setStatus("Analyzing with AI...");
