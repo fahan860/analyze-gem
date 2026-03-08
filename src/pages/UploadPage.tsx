@@ -99,11 +99,6 @@ export default function UploadPage() {
         body: { pdfBase64: base64, fileName: file.name },
       });
 
-      // 5. Call AI analysis
-      setStatus("Analyzing with AI...");
-      const { data: analysisData, error: fnError } = await supabase.functions.invoke("analyze-report", {
-        body: { extractedText },
-      });
 
       if (fnError) {
         console.error("Edge function error:", fnError);
