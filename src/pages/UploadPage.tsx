@@ -6,43 +6,27 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import * as pdfjsLib from "pdfjs-dist";
 
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs`;
 
-// We'll extract text client-side using a simple approach
 async function extractTextFromPDF(file: File): Promise<string> {
-  // Read file as ArrayBuffer and use basic text extraction
   const arrayBuffer = await file.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
-  
-  // Simple PDF text extraction - find text between stream markers
-  let text = "";
-  const decoder = new TextDecoder("utf-8", { fatal: false });
-  const rawText = decoder.decode(uint8Array);
-  
-  // Extract readable text segments
-  const segments = rawText.match(/\(([^)]+)\)/g);
-  if (segments) {
-    text = segments.map(s => s.slice(1, -1)).join(" ");
-  }
-  
-  // Also try to find BT...ET text blocks
-  const btBlocks = rawText.match(/BT[\s\S]*?ET/g);
-  if (btBlocks) {
-    for (const block of btBlocks) {
-      const tjMatches = block.match(/\(([^)]*)\)\s*Tj/g);
-      if (tjMatches) {
-        text += " " + tjMatches.map(m => {
-          const match = m.match(/\(([^)]*)\)/);
-          return match ? match[1] : "";
-        }).join(" ");
-      }
-    }
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const textParts: string[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item: any) => item.str)
+      .join(" ");
+    textParts.push(pageText);
   }
 
-  // Clean up
-  text = text.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s+/g, " ").trim();
-  
-  if (text.length < 100) {
+  const text = textParts.join("\n").trim();
+
+  if (text.length < 50) {
     throw new Error("Could not extract sufficient text from the PDF. The file may be image-based or encrypted.");
   }
 
