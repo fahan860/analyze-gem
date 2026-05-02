@@ -1,18 +1,87 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function extractTextFromPDFBytes(bytes: Uint8Array): string {
+  const decoder = new TextDecoder("utf-8", { fatal: false });
+  const rawText = decoder.decode(bytes);
+
+  let text = "";
+
+  const segments = rawText.match(/\(([^)]+)\)/g);
+  if (segments) {
+    text = segments.map((s: string) => s.slice(1, -1)).join(" ");
+  }
+
+  const btBlocks = rawText.match(/BT[\s\S]*?ET/g);
+  if (btBlocks) {
+    for (const block of btBlocks) {
+      const tjMatches = block.match(/\(([^)]*)\)\s*Tj/g);
+      if (tjMatches) {
+        text += " " + tjMatches.map((m: string) => {
+          const match = m.match(/\(([^)]*)\)/);
+          return match ? match[1] : "";
+        }).join(" ");
+      }
+    }
+  }
+
+  text = text.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s+/g, " ").trim();
+  return text;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { extractedText } = await req.json();
+    // Validate JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const body = await req.json();
+
+    // Support both formats: direct text or base64 PDF
+    let extractedText = body.extractedText;
+
+    if (!extractedText && body.pdfBase64) {
+      const binaryStr = atob(body.pdfBase64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      extractedText = extractTextFromPDFBytes(bytes);
+
+      if (extractedText.length < 50) {
+        extractedText = `Financial report: ${body.fileName || "unknown"}. The PDF text could not be fully extracted (possibly image-based). Please provide a general financial analysis based on typical report patterns.`;
+      }
+    }
 
     if (!extractedText || typeof extractedText !== "string") {
-      return new Response(JSON.stringify({ error: "Missing extractedText" }), {
+      return new Response(JSON.stringify({ error: "Missing extractedText or pdfBase64" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -85,7 +154,6 @@ Rules:
 
     if (!content) throw new Error("No content in AI response");
 
-    // Parse JSON from response (handle markdown code blocks)
     let parsed;
     try {
       const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();

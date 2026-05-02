@@ -7,46 +7,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
-
-// We'll extract text client-side using a simple approach
-async function extractTextFromPDF(file: File): Promise<string> {
-  // Read file as ArrayBuffer and use basic text extraction
-  const arrayBuffer = await file.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
-  
-  // Simple PDF text extraction - find text between stream markers
-  let text = "";
-  const decoder = new TextDecoder("utf-8", { fatal: false });
-  const rawText = decoder.decode(uint8Array);
-  
-  // Extract readable text segments
-  const segments = rawText.match(/\(([^)]+)\)/g);
-  if (segments) {
-    text = segments.map(s => s.slice(1, -1)).join(" ");
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
-  
-  // Also try to find BT...ET text blocks
-  const btBlocks = rawText.match(/BT[\s\S]*?ET/g);
-  if (btBlocks) {
-    for (const block of btBlocks) {
-      const tjMatches = block.match(/\(([^)]*)\)\s*Tj/g);
-      if (tjMatches) {
-        text += " " + tjMatches.map(m => {
-          const match = m.match(/\(([^)]*)\)/);
-          return match ? match[1] : "";
-        }).join(" ");
-      }
-    }
-  }
-
-  // Clean up
-  text = text.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s+/g, " ").trim();
-  
-  if (text.length < 100) {
-    throw new Error("Could not extract sufficient text from the PDF. The file may be image-based or encrypted.");
-  }
-
-  return text;
+  return btoa(binary);
 }
 
 export default function UploadPage() {
@@ -121,23 +89,21 @@ export default function UploadPage() {
 
       if (insertError) throw insertError;
 
-      // 4. Extract text from PDF
-      setStatus("Extracting text from PDF...");
-      let extractedText: string;
-      try {
-        extractedText = await extractTextFromPDF(file);
-      } catch {
-        // If client-side extraction fails, send a minimal message
-        extractedText = `Financial report: ${file.name}. Unable to extract text client-side. Please analyze based on the filename and common financial report patterns.`;
-      }
+      // 4. Convert PDF to base64 for server-side processing
+      setStatus("Preparing PDF for analysis...");
+      const base64 = await fileToBase64(file);
 
       // 5. Call AI analysis
       setStatus("Analyzing with AI...");
       const { data: analysisData, error: fnError } = await supabase.functions.invoke("analyze-report", {
-        body: { extractedText },
+        body: { pdfBase64: base64, fileName: file.name },
       });
 
-      if (fnError) throw fnError;
+
+      if (fnError) {
+        console.error("Edge function error:", fnError);
+        throw new Error(fnError.message || "AI analysis failed. Please try again.");
+      }
       if (analysisData?.error) throw new Error(analysisData.error);
 
       // 6. Save analysis results
