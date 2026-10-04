@@ -1,5 +1,9 @@
 # FinSight AI — AI-Powered Financial Report Analyzer
 
+[![Portfolio](https://img.shields.io/badge/Portfolio-case%20study-0ea5e9)](https://fatima-zahrae-ahannuk.vercel.app/projects/finsight)
+
+> Part of the portfolio of **Fatima Zahrae Ahannuk** — case study: https://fatima-zahrae-ahannuk.vercel.app/projects/finsight
+
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react) ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript) ![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite) ![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase) ![Gemini](https://img.shields.io/badge/Google-Gemini-4285F4?logo=google)
 
 FinSight AI lets users upload financial report PDFs (10-K, 10-Q, annual reports) and instantly generates an AI-powered analysis — including an executive summary, KPI extraction, risk factor highlights, and an overall financial health score — all saved to a personal dashboard.
